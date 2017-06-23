@@ -53,13 +53,14 @@ def pre_processing(images):
 def label_processing(labels):
 	processed_labels = []
 	for label in labels:
-		new_label = []
-		for i in range(1, 6):
-			test = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-			test[label[i]] = 1
-			new_label.append(test)
-		processed_labels.append(np.array(new_label, ndmin=2))
-	return np.array(processed_labels, ndmin = 3)
+		# new_label = []
+		# for i in range(6):
+ 			# test = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+			# test[label[i]] = 1
+			# new_label.append(test)
+		# processed_labels.append(np.array(new_label, ndmin=2))
+		processed_labels.append(label[5]*100000+label[4]*10000+label[3]*1000+label[2]*100+label[1]*10+label[0])
+	return np.array(processed_labels)
 
 with open(pickle_file, 'rb') as f:
 	save = pickle.load(f)
@@ -82,6 +83,10 @@ output_vgg16_conv = model_vgg16_conv(input)
 # output_vgg16_conv = GlobalAveragePooling2D()(output_vgg16_conv)
 
 x = Flatten(name='flatten')(output_vgg16_conv)
+d0 = Dense(4096, activation='relu', name='numDigitsfc1')(x)
+d0 = Dense(1024, activation='relu', name='numDigitsfc2')(d0)
+d0 = Dense(11, activation='softmax', name='numDigits')(d0)
+
 d1 = Dense(4096, activation='relu', name='d1fc1')(x)
 d1 = Dense(1024, activation='relu', name='d1fc2')(d1)
 d1 = Dense(11, activation='softmax', name='d1pred')(d1)
@@ -102,7 +107,10 @@ d5 = Dense(4096, activation='relu', name='d5fc1')(x)
 d5 = Dense(1024, activation='relu', name='d5fc2')(d5)
 d5 = Dense(11, activation='softmax', name='d5pred')(d5)
 
-my_model = Model(input=input, output=[d1, d2, d3, d4, d5])
+digits = [K.argmax(d0,1), K.argmax(d1,1), K.argmax(d2,1), K.argmax(d3,1), K.argmax(d4,1), K.argmax(d5,1)]
+# digits = [digit for digit in digits if digit[0] != 10] # how to comapre keras_tensor with integer
+predicted_output = digits[5]*100000 + digits[4]*10000 + digits[3]*1000 + digits[2]*100 + digits[1]*10 + digits[0] 
+model = Model(input=input, output=predicted_output)
 
 
 def mean_accuracy(true, pred):
@@ -112,21 +120,25 @@ def mean_accuracy(true, pred):
 
 # for layer in model_vgg16_conv.layers:
 #    layer.trainable = False
-my_model.summary()
+model.summary()
 
 # sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-my_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
-checkpointer = ModelCheckpoint(filepath="../results/best_model/fn_model.{epoch:02d}-{val_acc:.6f}.hdf5", verbose=1, monitor='val_d1pred_acc', save_best_only=True, save_weights_only=False, mode='max', period=1)
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+if not os.path.exists("..results"):
+    os.mkdir("../results")
+    os.mkdir("../results/best_models")
+    os.mkdir("../results/logs")
+	
+# callback functions
+checkpointer = ModelCheckpoint(filepath="../results/best_models/fn_model.{epoch:02d}-{val_acc:.6f}.hdf5", verbose=1, monitor='val_acc', save_best_only=True, save_weights_only=False, mode='max', period=1)
 tf_board = TensorBoard(log_dir='../results/logs', histogram_freq=0, write_graph=True, write_images=True)
 csv_logger = CSVLogger('../results/training.log')
+early_stopping = EarlyStopping(monitor='val_loss', patience=10)
 
-early_stopping = EarlyStopping(monitor='val_d5pred_loss', patience=12)
-
-my_model.fit(train_dataset, [train_labels[:,0], train_labels[:,1], train_labels[:,2], train_labels[:,3], train_labels[:,4]], batch_size=batch_size, nb_epoch=100, validation_data = (valid_dataset, [valid_labels[:,0], valid_labels[:,1], valid_labels[:,2], valid_labels[:,3], valid_labels[:,4]]), callbacks=[tf_board, csv_logger])
-
-my_model.save("../results/final_svhn.hdf5")
-score, acc = my_model.evaluate(test_dataset, [test_labels[:,0], test_labels[:,1], test_labels[:,2], test_labels[:,3], test_labels[:,4]], batch_size=batch_size)
+# model.fit(train_dataset, [train_labels[:,0], train_labels[:,1], train_labels[:,2], train_labels[:,3], train_labels[:,4]], batch_size=batch_size, nb_epoch=100, validation_data = (valid_dataset, [valid_labels[:,0], valid_labels[:,1], valid_labels[:,2], valid_labels[:,3], valid_labels[:,4]]), callbacks=[tf_board, csv_logger])
+model.fit(train_dataset, train_labels, batch_size=batch_size, nb_epoch=250, validation_data=(valid_dataset, valid_labels), callbacks=[checkpointer, tf_board, csv_logger, early_stopping])
+model.save("../results/final_svhn.hdf5")
+score, acc = model.evaluate(test_dataset, test_labels, batch_size=batch_size)
 resultsfile = open("../results/results.txt", 'w')
 resultsfile.write("test_acc : "+str(acc))
 resultsfile.close()
