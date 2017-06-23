@@ -155,7 +155,7 @@ dsf = DigitStructFile(fin)
 extra_data = dsf.getAllDigitStructure_ByDigit()
 
 def image_processing(image, boxes):
-	image_size = 120
+	image_size = 32
 	processed_boxes = []
 	image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 	image = cv2.resize(image, (image_size, image_size), interpolation=cv2.INTER_AREA)
@@ -216,9 +216,10 @@ print(train_dataset_t.shape, train_labels_t.shape)
 print(test_dataset.shape, test_labels.shape)
 print(valid_dataset.shape, valid_labels.shape)
 
-pickle_file = '../dataset/SVHN_multi_BBox.npy'
+pickle_file = '../dataset/SVHN_multi_BBox.pickle'
 
 try:
+	f = open(pickle_file, 'wb')
 	save = {
 		'train_dataset': train_dataset_t,
 		'train_labels': train_labels_t,
@@ -227,7 +228,8 @@ try:
 		'test_dataset': test_dataset,
 		'test_labels': test_labels,
 		}
-	np.save(pickle_file, save)
+	pickle.dump(save, f, pickle.HIGHEST_PROTOCOL)
+	f.close()
 except Exception as e:
 	print('Unable to save data to', pickle_file, ':', e)
 	raise
