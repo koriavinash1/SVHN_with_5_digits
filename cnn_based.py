@@ -78,10 +78,11 @@ with open(pickle_file, 'rb') as f:
 model_vgg16_conv = VGG16(weights='imagenet', include_top=False)
 model_vgg16_conv.summary()
 
-input = Input(shape=(image_size, image_size, num_channels), name = 'image_input')
+img_input = Input(shape=(image_size, image_size, num_channels), name = 'image_input')
 output_vgg16_conv = model_vgg16_conv(input)
 # output_vgg16_conv = GlobalAveragePooling2D()(output_vgg16_conv)
 
+# attention modelling for seperating digits
 x = Flatten(name='flatten')(output_vgg16_conv)
 d0 = Dense(4096, activation='relu', name='numDigitsfc1')(x)
 d0 = Dense(1024, activation='relu', name='numDigitsfc2')(d0)
@@ -110,7 +111,7 @@ d5 = Dense(11, activation='softmax', name='d5pred')(d5)
 digits = [K.argmax(d0,1), K.argmax(d1,1), K.argmax(d2,1), K.argmax(d3,1), K.argmax(d4,1), K.argmax(d5,1)]
 # digits = [digit for digit in digits if digit[0] != 10] # how to comapre keras_tensor with integer
 predicted_output = digits[5]*100000 + digits[4]*10000 + digits[3]*1000 + digits[2]*100 + digits[1]*10 + digits[0] 
-model = Model(input=input, output=predicted_output)
+model = Model(input=img_input, output=predicted_output)
 
 
 def mean_accuracy(true, pred):
@@ -131,7 +132,7 @@ if not os.path.exists("..results"):
 	
 # callback functions
 checkpointer = ModelCheckpoint(filepath="../results/best_models/fn_model.{epoch:02d}-{val_acc:.6f}.hdf5", verbose=1, monitor='val_acc', save_best_only=True, save_weights_only=False, mode='max', period=1)
-tf_board = TensorBoard(log_dir='../results/logs', histogram_freq=0, write_graph=True, write_images=True)
+tf_board = TensorBoard(log_dir='../results/logs', histogram_freq=100, write_graph=True, write_grads:True, write_images=True)
 csv_logger = CSVLogger('../results/training.log')
 early_stopping = EarlyStopping(monitor='val_loss', patience=10)
 
@@ -140,5 +141,6 @@ model.fit(train_dataset, train_labels, batch_size=batch_size, nb_epoch=250, vali
 model.save("../results/final_svhn.hdf5")
 score, acc = model.evaluate(test_dataset, test_labels, batch_size=batch_size)
 resultsfile = open("../results/results.txt", 'w')
-resultsfile.write("test_acc : "+str(acc))
+resultsfile.write("test_acc: "+str(acc)+ "\n")
+resultsfile.write("test_score: "+str(score))
 resultsfile.close()
